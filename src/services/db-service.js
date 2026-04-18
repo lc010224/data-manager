@@ -99,10 +99,23 @@ async function listTables(profile) {
   `);
 }
 
-async function getTableRows(profile, tableName, limit = 200) {
+async function getTableRows(profile, tableName, limit = 200, offset = 0) {
   const safeLimit = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(2000, Number(limit))) : 200;
-  const sql = `select * from ${quoteTableName(profile, tableName)} limit ${safeLimit}`;
-  return query(profile, sql);
+  const safeOffset = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : 0;
+  const quotedTable = quoteTableName(profile, tableName);
+  const rows = await query(profile, `select * from ${quotedTable} limit ${safeLimit} offset ${safeOffset}`);
+  const countSql = profile.client === 'postgres'
+    ? `select count(*)::int as total from ${quotedTable}`
+    : `select count(*) as total from ${quotedTable}`;
+  const countRows = await query(profile, countSql);
+  return {
+    rows,
+    pagination: {
+      limit: safeLimit,
+      offset: safeOffset,
+      total: Number(countRows[0]?.total || 0),
+    },
+  };
 }
 
 async function executeSql(profile, sql) {

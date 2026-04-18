@@ -25,17 +25,24 @@ function diffRecords(fileRows, dbRows, keyField) {
   for (const [key, fileRow] of fileMap) {
     const dbRow = dbMap.get(key);
     if (!dbRow) {
-      onlyInFile.push(fileRow);
+      onlyInFile.push({ key, row: fileRow });
       continue;
     }
     if (JSON.stringify(fileRow) !== JSON.stringify(dbRow)) {
-      changed.push({ key, file: fileRow, database: dbRow });
+      const fieldDiffs = [...new Set([...Object.keys(fileRow), ...Object.keys(dbRow)])]
+        .filter((field) => fileRow[field] !== dbRow[field])
+        .map((field) => ({
+          field,
+          fileValue: fileRow[field] ?? null,
+          databaseValue: dbRow[field] ?? null,
+        }));
+      changed.push({ key, file: fileRow, database: dbRow, fieldDiffs });
     }
   }
 
   for (const [key, dbRow] of dbMap) {
     if (!fileMap.has(key)) {
-      onlyInDatabase.push(dbRow);
+      onlyInDatabase.push({ key, row: dbRow });
     }
   }
 

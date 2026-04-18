@@ -98,8 +98,13 @@ app.get('/api/connections/:id/tables', asyncHandler(async (req, res) => {
 
 app.get('/api/connections/:id/tables/:tableName/rows', asyncHandler(async (req, res) => {
   const connection = getConnection(req.params.id);
-  const rows = await dbService.getTableRows(connection, decodeURIComponent(req.params.tableName), req.query.limit || 200);
-  res.json(rows);
+  const result = await dbService.getTableRows(
+    connection,
+    decodeURIComponent(req.params.tableName),
+    req.query.limit || 200,
+    req.query.offset || 0,
+  );
+  res.json(result);
 }));
 
 app.post('/api/connections/:id/query', asyncHandler(async (req, res) => {
@@ -127,7 +132,8 @@ app.post('/api/compare', asyncHandler(async (req, res) => {
 app.post('/api/compare/sync', asyncHandler(async (req, res) => {
   const { connectionId, tableName, rows } = req.body;
   const connection = getConnection(connectionId);
-  const result = await dbService.upsertRows(connection, tableName, rows || []);
+  const normalizedRows = (rows || []).map((item) => item.row || item);
+  const result = await dbService.upsertRows(connection, tableName, normalizedRows);
   res.json(result);
 }));
 
