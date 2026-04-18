@@ -5,11 +5,18 @@ import { env } from './env.js';
 const files = {
   connections: path.join(env.storageRoot, 'connections.json'),
   scripts: path.join(env.storageRoot, 'scripts.json'),
+  settings: path.join(env.storageRoot, 'settings.json'),
 };
 
 const defaults = {
   connections: [],
   scripts: [],
+  settings: {
+    backgroundUrls: [],
+    rotateSeconds: 30,
+    overviewConnectionId: '',
+    overviewTableName: '',
+  },
 };
 
 function ensureFile(name) {
@@ -41,5 +48,11 @@ export const store = {
   },
   writeScripts(data) {
     return writeJson('scripts', data);
+  },
+  readSettings() {
+    return { ...defaults.settings, ...readJson('settings') };
+  },
+  writeSettings(data) {
+    return writeJson('settings', { ...defaults.settings, ...data });
   },
 };

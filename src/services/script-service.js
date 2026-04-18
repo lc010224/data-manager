@@ -9,12 +9,22 @@ import { fileService } from './file-service.js';
 const jobs = new Map();
 const executions = new Map();
 
+function getScript(scriptId) {
+  return store.readScripts().find((item) => item.id === scriptId) || null;
+}
+
 function logPathFor(scriptId) {
+  const script = getScript(scriptId);
+  if (script?.logRelativePath) {
+    return fileService.safeResolve(env.logsRoot, script.logRelativePath);
+  }
   return path.join(env.logsRoot, `${scriptId}.log`);
 }
 
 function appendLog(scriptId, line) {
-  fs.appendFileSync(logPathFor(scriptId), `[${new Date().toISOString()}] ${line}\n`);
+  const target = logPathFor(scriptId);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.appendFileSync(target, `[${new Date().toISOString()}] ${line}\n`);
 }
 
 function getScripts() {
@@ -80,7 +90,7 @@ function refreshSchedules() {
 }
 
 async function runScript(scriptId) {
-  const script = getScripts().find((item) => item.id === scriptId);
+  const script = getScript(scriptId);
   if (!script) {
     throw new Error('Script not found.');
   }
@@ -121,8 +131,10 @@ function upsertScript(payload) {
     id: payload.id || `script-${Date.now()}`,
     name: payload.name,
     relativePath: payload.relativePath,
+    logRelativePath: payload.logRelativePath || '',
     workingDirectory: payload.workingDirectory || '.',
     schedule: payload.schedule || '',
+    taskName: payload.taskName || '',
     enabled: Boolean(payload.enabled),
     description: payload.description || '',
     runtime: payload.runtime || '',
@@ -159,7 +171,8 @@ function getLogs(scriptId) {
   if (!fs.existsSync(file)) {
     return '';
   }
-  return fs.readFileSync(file, 'utf8');
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).reverse();
+  return lines.join('\n');
 }
 
 refreshSchedules();

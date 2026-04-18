@@ -26,24 +26,43 @@ function getConnection(id) {
   return connection;
 }
 
-app.get('/api/overview', (req, res) => {
+app.get('/api/overview', asyncHandler(async (req, res) => {
   const connections = store.readConnections();
-  const scripts = store.readScripts();
+  const scripts = scriptService.getScripts().map((item) => ({ ...item, execution: scriptService.getExecution(item.id) }));
+  const settings = store.readSettings();
+  let subTypeSummary = [];
+  if (settings.overviewConnectionId && settings.overviewTableName) {
+    try {
+      const connection = getConnection(settings.overviewConnectionId);
+      subTypeSummary = await dbService.getSubTypeSummary(connection, settings.overviewTableName);
+    } catch {
+      subTypeSummary = [];
+    }
+  }
   res.json({
     appName: 'Data Manager',
     adminerUrl: env.adminerUrl,
-    mappedRoots: {
-      data: env.dataRoot,
-      scripts: env.scriptsRoot,
-      logs: env.logsRoot,
-    },
+    mappedRoots: { data: env.dataRoot, scripts: env.scriptsRoot, logs: env.logsRoot },
     stats: {
       connections: connections.length,
       enabledConnections: connections.filter((item) => item.enabled).length,
       scripts: scripts.length,
-      scheduledScripts: scripts.filter((item) => item.enabled && item.schedule).length,
+      runningScripts: scripts.filter((item) => item.execution?.status === 'running').length,
     },
+    connections,
+    scripts,
+    settings,
+    subTypeSummary,
   });
+}));
+
+app.get('/api/settings', (req, res) => {
+  res.json(store.readSettings());
+});
+
+app.post('/api/settings', (req, res) => {
+  const next = store.writeSettings(req.body || {});
+  res.json(next);
 });
 
 app.get('/api/connections', (req, res) => {
@@ -65,11 +84,7 @@ app.post('/api/connections', (req, res) => {
     enabled: Boolean(payload.enabled),
   };
   const index = connections.findIndex((item) => item.id === next.id);
-  if (index >= 0) {
-    connections[index] = next;
-  } else {
-    connections.push(next);
-  }
+  if (index >= 0) connections[index] = next; else connections.push(next);
   store.writeConnections(connections);
   res.json(next);
 });
@@ -77,23 +92,21 @@ app.post('/api/connections', (req, res) => {
 app.delete('/api/connections/:id', (req, res) => {
   const connections = store.readConnections();
   const next = connections.filter((item) => item.id !== req.params.id);
-  if (next.length === connections.length) {
-    return res.status(404).json({ message: 'Connection not found.' });
-  }
+  if (next.length === connections.length) return res.status(404).json({ message: 'Connection not found.' });
   store.writeConnections(next);
   res.json({ ok: true });
 });
 
 app.post('/api/connections/:id/test', asyncHandler(async (req, res) => {
-  const connection = getConnection(req.params.id);
-  const result = await dbService.testConnection(connection);
-  res.json(result);
+  res.json(await dbService.testConnection(getConnection(req.params.id)));
 }));
 
 app.get('/api/connections/:id/tables', asyncHandler(async (req, res) => {
-  const connection = getConnection(req.params.id);
-  const rows = await dbService.listTables(connection);
-  res.json(rows);
+  res.json(await dbService.listTables(getConnection(req.params.id)));
+}));
+
+app.get('/api/connections/:id/tables/:tableName/columns', asyncHandler(async (req, res) => {
+  res.json(await dbService.listColumns(getConnection(req.params.id), decodeURIComponent(req.params.tableName)));
 }));
 
 app.get('/api/connections/:id/tables/:tableName/rows', asyncHandler(async (req, res) => {
@@ -110,57 +123,48 @@ app.get('/api/connections/:id/tables/:tableName/rows', asyncHandler(async (req, 
   res.json(result);
 }));
 
+app.get('/api/connections/:id/tables/:tableName/sub-type-summary', asyncHandler(async (req, res) => {
+  const rows = await dbService.getSubTypeSummary(getConnection(req.params.id), decodeURIComponent(req.params.tableName));
+  res.json(rows);
+}));
+
 app.post('/api/connections/:id/query', asyncHandler(async (req, res) => {
-  const connection = getConnection(req.params.id);
-  const result = await dbService.executeSql(connection, req.body.sql);
-  res.json(result);
+  res.json(await dbService.executeSql(getConnection(req.params.id), req.body.sql));
 }));
 
 app.post('/api/files/browse', (req, res) => {
   const rootType = req.body.rootType || 'data';
   const relativePath = req.body.relativePath || '.';
-  const root = rootType === 'scripts' ? env.scriptsRoot : env.dataRoot;
+  const root = rootType === 'scripts' ? env.scriptsRoot : rootType === 'logs' ? env.logsRoot : env.dataRoot;
   res.json(fileService.listDirectory(root, relativePath));
 });
 
 app.post('/api/compare', asyncHandler(async (req, res) => {
   const { connectionId, tableName, filePath, keyField, limit = 500 } = req.body;
-  const connection = getConnection(connectionId);
   const fileRows = fileService.readStructuredFile(env.dataRoot, filePath);
-  const dbResult = await dbService.getTableRows(connection, tableName, limit);
-  const diff = compareService.diffRecords(fileRows, dbResult.rows || [], keyField);
-  res.json(diff);
+  const dbResult = await dbService.getTableRows(getConnection(connectionId), tableName, limit);
+  res.json(compareService.diffRecords(fileRows, dbResult.rows || [], keyField));
 }));
 
 app.post('/api/compare/sync', asyncHandler(async (req, res) => {
   const { connectionId, tableName, rows } = req.body;
-  const connection = getConnection(connectionId);
-  const normalizedRows = (rows || []).map((item) => item.row || item);
-  const result = await dbService.upsertRows(connection, tableName, normalizedRows);
-  res.json(result);
+  res.json(await dbService.upsertRows(getConnection(connectionId), tableName, (rows || []).map((item) => item.row || item)));
 }));
 
 app.get('/api/scripts', (req, res) => {
-  const scripts = scriptService.getScripts().map((item) => ({
-    ...item,
-    execution: scriptService.getExecution(item.id),
-  }));
-  res.json(scripts);
+  res.json(scriptService.getScripts().map((item) => ({ ...item, execution: scriptService.getExecution(item.id) })));
 });
 
 app.post('/api/scripts', (req, res) => {
-  const script = scriptService.upsertScript(req.body);
-  res.json(script);
+  res.json(scriptService.upsertScript(req.body));
 });
 
 app.delete('/api/scripts/:id', (req, res) => {
-  const result = scriptService.deleteScript(req.params.id);
-  res.json(result);
+  res.json(scriptService.deleteScript(req.params.id));
 });
 
 app.post('/api/scripts/:id/run', asyncHandler(async (req, res) => {
-  const execution = await scriptService.runScript(req.params.id);
-  res.json(execution);
+  res.json(await scriptService.runScript(req.params.id));
 }));
 
 app.get('/api/scripts/:id/logs', (req, res) => {
@@ -172,9 +176,7 @@ app.get('*', (req, res) => {
 });
 
 app.use((error, req, res, next) => {
-  res.status(error.status || 500).json({
-    message: error.message || 'Unexpected error',
-  });
+  res.status(error.status || 500).json({ message: error.message || 'Unexpected error' });
 });
 
 app.listen(env.port, () => {
