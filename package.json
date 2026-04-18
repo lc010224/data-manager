@@ -1,0 +1,17 @@
+{
+  "name": "data-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.6",
+    "express": "^4.21.2",
+    "mysql2": "^3.14.1",
+    "node-cron": "^4.2.1",
+    "pg": "^8.16.3"
+  }
+}

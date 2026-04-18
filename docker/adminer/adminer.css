@@ -1,0 +1,9 @@
+body { background:#f5f8fd; }
+a { color:#2583ff; }
+a:visited { color:#1f5fd1; }
+a:hover { color:#1dc3a6; }
+h1, h2, thead td, thead th, .js .column, :target { background:#eef6ff !important; }
+#menu, .logout, .footer > div, .message table { background:#ffffff !important; }
+body, table, td, th, .js .column, fieldset, #menu p, #logins, #tables { border-color: rgba(81,103,140,.18) !important; }
+fieldset, .error, .message, table, #menu { border-radius: 14px; }
+input, select, textarea { border-radius: 10px; border:1px solid rgba(81,103,140,.18); }
