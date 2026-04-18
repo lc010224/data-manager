@@ -26,6 +26,35 @@ function saveScripts(scripts) {
   return scripts;
 }
 
+function resolveRuntime(script, absoluteFile) {
+  const runtime = (script.runtime || '').trim().toLowerCase();
+  const ext = path.extname(absoluteFile).toLowerCase();
+
+  if (runtime === 'python' || ext === '.py') {
+    return process.platform === 'win32'
+      ? { command: 'python', args: [absoluteFile] }
+      : { command: 'python3', args: [absoluteFile] };
+  }
+
+  if (runtime === 'node' || ext === '.js' || ext === '.mjs' || ext === '.cjs') {
+    return { command: 'node', args: [absoluteFile] };
+  }
+
+  if (runtime === 'powershell' || ext === '.ps1') {
+    return process.platform === 'win32'
+      ? { command: 'powershell.exe', args: ['-ExecutionPolicy', 'Bypass', '-File', absoluteFile] }
+      : { command: 'pwsh', args: ['-File', absoluteFile] };
+  }
+
+  if (runtime === 'shell' || ext === '.sh') {
+    return { command: '/bin/sh', args: [absoluteFile] };
+  }
+
+  return process.platform === 'win32'
+    ? { command: 'powershell.exe', args: ['-ExecutionPolicy', 'Bypass', '-File', absoluteFile] }
+    : { command: absoluteFile, args: [] };
+}
+
 function scheduleScript(script) {
   if (!script.enabled || !script.schedule) {
     return;
@@ -59,19 +88,16 @@ async function runScript(scriptId) {
   const cwd = script.workingDirectory
     ? fileService.safeResolve(env.scriptsRoot, script.workingDirectory)
     : path.dirname(absoluteFile);
+  const runtime = resolveRuntime(script, absoluteFile);
 
   appendLog(script.id, `Starting script: ${script.name}`);
-
-  const shell = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
-  const args = process.platform === 'win32'
-    ? ['-ExecutionPolicy', 'Bypass', '-File', absoluteFile]
-    : [absoluteFile];
+  appendLog(script.id, `Runtime: ${runtime.command} ${runtime.args.join(' ')}`);
 
   const execution = { status: 'running', startedAt: new Date().toISOString(), pid: null };
   executions.set(script.id, execution);
 
   await new Promise((resolve, reject) => {
-    const child = spawn(shell, args, { cwd, env: process.env });
+    const child = spawn(runtime.command, runtime.args, { cwd, env: process.env });
     execution.pid = child.pid;
 
     child.stdout.on('data', (data) => appendLog(script.id, data.toString().trimEnd()));
@@ -99,6 +125,7 @@ function upsertScript(payload) {
     schedule: payload.schedule || '',
     enabled: Boolean(payload.enabled),
     description: payload.description || '',
+    runtime: payload.runtime || '',
   };
   const index = scripts.findIndex((item) => item.id === next.id);
   if (index >= 0) {
@@ -109,6 +136,22 @@ function upsertScript(payload) {
   saveScripts(scripts);
   refreshSchedules();
   return next;
+}
+
+function deleteScript(scriptId) {
+  const scripts = getScripts();
+  const next = scripts.filter((item) => item.id !== scriptId);
+  if (next.length === scripts.length) {
+    throw new Error('Script not found.');
+  }
+  const task = jobs.get(scriptId);
+  if (task) {
+    task.stop();
+    jobs.delete(scriptId);
+  }
+  saveScripts(next);
+  executions.delete(scriptId);
+  return { ok: true };
 }
 
 function getLogs(scriptId) {
@@ -124,6 +167,7 @@ refreshSchedules();
 export const scriptService = {
   getScripts,
   upsertScript,
+  deleteScript,
   runScript,
   getLogs,
   refreshSchedules,

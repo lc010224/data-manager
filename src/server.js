@@ -74,6 +74,16 @@ app.post('/api/connections', (req, res) => {
   res.json(next);
 });
 
+app.delete('/api/connections/:id', (req, res) => {
+  const connections = store.readConnections();
+  const next = connections.filter((item) => item.id !== req.params.id);
+  if (next.length === connections.length) {
+    return res.status(404).json({ message: 'Connection not found.' });
+  }
+  store.writeConnections(next);
+  res.json({ ok: true });
+});
+
 app.post('/api/connections/:id/test', asyncHandler(async (req, res) => {
   const connection = getConnection(req.params.id);
   const result = await dbService.testConnection(connection);
@@ -84,6 +94,18 @@ app.get('/api/connections/:id/tables', asyncHandler(async (req, res) => {
   const connection = getConnection(req.params.id);
   const rows = await dbService.listTables(connection);
   res.json(rows);
+}));
+
+app.get('/api/connections/:id/tables/:tableName/rows', asyncHandler(async (req, res) => {
+  const connection = getConnection(req.params.id);
+  const rows = await dbService.getTableRows(connection, decodeURIComponent(req.params.tableName), req.query.limit || 200);
+  res.json(rows);
+}));
+
+app.post('/api/connections/:id/query', asyncHandler(async (req, res) => {
+  const connection = getConnection(req.params.id);
+  const result = await dbService.executeSql(connection, req.body.sql);
+  res.json(result);
 }));
 
 app.post('/api/files/browse', (req, res) => {
@@ -120,6 +142,11 @@ app.get('/api/scripts', (req, res) => {
 app.post('/api/scripts', (req, res) => {
   const script = scriptService.upsertScript(req.body);
   res.json(script);
+});
+
+app.delete('/api/scripts/:id', (req, res) => {
+  const result = scriptService.deleteScript(req.params.id);
+  res.json(result);
 });
 
 app.post('/api/scripts/:id/run', asyncHandler(async (req, res) => {

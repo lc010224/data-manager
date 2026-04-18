@@ -35,6 +35,32 @@ function resolveRunner(profile) {
   return profile.client === 'postgres' ? withPostgres : withMysql;
 }
 
+function escapeMysqlIdentifier(value) {
+  return `\`${String(value).replaceAll('`', '``')}\``;
+}
+
+function escapePostgresIdentifier(value) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
+
+function quoteTableName(profile, tableName) {
+  const normalized = String(tableName || '').trim();
+  if (!normalized) {
+    throw new Error('Table name is required.');
+  }
+
+  const segments = normalized.split('.').map((item) => item.trim()).filter(Boolean);
+  if (!segments.length || segments.length > 2) {
+    throw new Error('Invalid table name.');
+  }
+
+  if (profile.client === 'postgres') {
+    return segments.map(escapePostgresIdentifier).join('.');
+  }
+
+  return escapeMysqlIdentifier(segments[segments.length - 1]);
+}
+
 async function query(profile, sql) {
   const run = resolveRunner(profile);
   if (profile.client === 'postgres') {
@@ -58,7 +84,7 @@ async function testConnection(profile) {
 async function listTables(profile) {
   if (profile.client === 'postgres') {
     return query(profile, `
-      select table_schema, table_name
+      select table_schema, table_name, concat(table_schema, '.', table_name) as full_name
       from information_schema.tables
       where table_schema not in ('pg_catalog', 'information_schema')
       order by table_schema, table_name
@@ -66,7 +92,7 @@ async function listTables(profile) {
   }
 
   return query(profile, `
-    select table_schema, table_name
+    select table_schema, table_name, table_name as full_name
     from information_schema.tables
     where table_schema = database()
     order by table_name
@@ -74,10 +100,49 @@ async function listTables(profile) {
 }
 
 async function getTableRows(profile, tableName, limit = 200) {
-  const sql = profile.client === 'postgres'
-    ? `select * from ${tableName} limit ${Number(limit)}`
-    : `select * from \`${tableName.replaceAll('`', '')}\` limit ${Number(limit)}`;
+  const safeLimit = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(2000, Number(limit))) : 200;
+  const sql = `select * from ${quoteTableName(profile, tableName)} limit ${safeLimit}`;
   return query(profile, sql);
+}
+
+async function executeSql(profile, sql) {
+  const trimmed = String(sql || '').trim();
+  if (!trimmed) {
+    throw new Error('SQL is required.');
+  }
+
+  if (profile.client === 'postgres') {
+    return withPostgres(profile, async (pool) => {
+      const result = await pool.query(trimmed);
+      return {
+        command: result.command,
+        rowCount: result.rowCount ?? 0,
+        fields: result.fields?.map((field) => field.name) || [],
+        rows: result.rows || [],
+      };
+    });
+  }
+
+  return withMysql(profile, async (connection) => {
+    const [rows, fields] = await connection.query(trimmed);
+    if (Array.isArray(rows)) {
+      return {
+        command: 'SELECT',
+        rowCount: rows.length,
+        fields: (fields || []).map((field) => field.name),
+        rows,
+      };
+    }
+
+    return {
+      command: trimmed.split(/\s+/)[0]?.toUpperCase() || 'QUERY',
+      rowCount: rows.affectedRows ?? 0,
+      affectedRows: rows.affectedRows ?? 0,
+      insertId: rows.insertId ?? null,
+      fields: [],
+      rows: [],
+    };
+  });
 }
 
 async function upsertRows(profile, tableName, rows) {
@@ -86,14 +151,14 @@ async function upsertRows(profile, tableName, rows) {
   }
 
   if (profile.client === 'postgres') {
-    throw new Error('PostgreSQL auto-sync is not implemented yet. Use SQL inside Adminer.');
+    throw new Error('PostgreSQL auto-sync is not implemented yet. Use SQL inside Adminer or SQL console.');
   }
 
   const columns = Object.keys(rows[0]);
   const placeholders = rows.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ');
   const values = rows.flatMap((row) => columns.map((column) => row[column] ?? null));
-  const updates = columns.map((column) => `\`${column}\` = values(\`${column}\`)`).join(', ');
-  const sql = `insert into \`${tableName.replaceAll('`', '')}\` (${columns.map((column) => `\`${column}\``).join(', ')}) values ${placeholders} on duplicate key update ${updates}`;
+  const updates = columns.map((column) => `${escapeMysqlIdentifier(column)} = values(${escapeMysqlIdentifier(column)})`).join(', ');
+  const sql = `insert into ${quoteTableName(profile, tableName)} (${columns.map((column) => escapeMysqlIdentifier(column)).join(', ')}) values ${placeholders} on duplicate key update ${updates}`;
 
   return withMysql(profile, async (connection) => {
     const [result] = await connection.query(sql, values);
@@ -106,5 +171,6 @@ export const dbService = {
   testConnection,
   listTables,
   getTableRows,
+  executeSql,
   upsertRows,
 };
