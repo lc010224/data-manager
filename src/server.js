@@ -103,6 +103,9 @@ app.get('/api/connections/:id/tables/:tableName/rows', asyncHandler(async (req, 
     decodeURIComponent(req.params.tableName),
     req.query.limit || 200,
     req.query.offset || 0,
+    req.query.filterColumn || '',
+    req.query.filterValue || '',
+    req.query.sortDirection || 'asc',
   );
   res.json(result);
 }));
@@ -124,8 +127,8 @@ app.post('/api/compare', asyncHandler(async (req, res) => {
   const { connectionId, tableName, filePath, keyField, limit = 500 } = req.body;
   const connection = getConnection(connectionId);
   const fileRows = fileService.readStructuredFile(env.dataRoot, filePath);
-  const dbRows = await dbService.getTableRows(connection, tableName, limit);
-  const diff = compareService.diffRecords(fileRows, dbRows, keyField);
+  const dbResult = await dbService.getTableRows(connection, tableName, limit);
+  const diff = compareService.diffRecords(fileRows, dbResult.rows || [], keyField);
   res.json(diff);
 }));
 

@@ -99,14 +99,28 @@ async function listTables(profile) {
   `);
 }
 
-async function getTableRows(profile, tableName, limit = 200, offset = 0) {
+async function getTableRows(profile, tableName, limit = 200, offset = 0, filterColumn = '', filterValue = '', sortDirection = 'asc') {
   const safeLimit = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(2000, Number(limit))) : 200;
   const safeOffset = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : 0;
   const quotedTable = quoteTableName(profile, tableName);
-  const rows = await query(profile, `select * from ${quotedTable} limit ${safeLimit} offset ${safeOffset}`);
+  const safeSortDirection = String(sortDirection).toLowerCase() === 'desc' ? 'desc' : 'asc';
+
+  let whereClause = '';
+  if (filterColumn && filterValue) {
+    const quotedColumn = profile.client === 'postgres'
+      ? escapePostgresIdentifier(filterColumn)
+      : escapeMysqlIdentifier(filterColumn);
+    whereClause = profile.client === 'postgres'
+      ? ` where cast(${quotedColumn} as text) ilike '%${String(filterValue).replaceAll("'", "''")}%'
+`
+      : ` where cast(${quotedColumn} as char) like '%${String(filterValue).replaceAll("'", "''")}%'`
+  }
+
+  const sql = `select * from ${quotedTable}${whereClause} order by 1 ${safeSortDirection} limit ${safeLimit} offset ${safeOffset}`;
+  const rows = await query(profile, sql);
   const countSql = profile.client === 'postgres'
-    ? `select count(*)::int as total from ${quotedTable}`
-    : `select count(*) as total from ${quotedTable}`;
+    ? `select count(*)::int as total from ${quotedTable}${whereClause}`
+    : `select count(*) as total from ${quotedTable}${whereClause}`;
   const countRows = await query(profile, countSql);
   return {
     rows,
