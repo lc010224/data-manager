@@ -4,10 +4,11 @@ services:
     container_name: data-manager
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3022:80"
     environment:
       - TZ=Asia/Shanghai
-      - ADMINER_URL=http://your-server-ip:8080
+      - PORT=3000
+      - ADMINER_URL=/adminer/index.php
       - DATA_ROOT=/app/data
       - SCRIPTS_ROOT=/app/scripts
       - LOGS_ROOT=/app/logs
@@ -17,12 +18,3 @@ services:
       - /home/data-manager/scripts:/app/scripts
       - /home/data-manager/logs:/app/logs
       - /home/data-manager/storage:/app/storage
-
-  data-manager-adminer:
-    image: ghcr.io/lc010224/data-manager-adminer:latest
-    container_name: data-manager-adminer
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-    environment:
-      - TZ=Asia/Shanghai

@@ -1,23 +1,25 @@
 # Data Manager
 
-一个基于 `adminer-master` 思路扩展出来的可视化数据库管理项目，镜像发布到 `ghcr.io/lc010224`，部署时通过 `docker compose` 直接拉取 `latest`。
+一个基于 `adminer-master` 思路整理出来的单镜像可视化数据库管理项目。现在所有需要的运行代码都放在 `data-manager` 目录里，部署时**只需要一个 `data-manager` 容器**，不再额外安装 `adminer-master` 容器。
 
-## 已实现方向
+## 当前实现方式
 
-- 内嵌 Adminer 工作台，复用其数据库连接、表结构、SQL 执行与基础管理能力
-- 自定义浅色现代化侧边栏界面
-- 数据目录浏览与 JSON/CSV -> 数据库表差异比对
-- 将“仅文件侧新增”的记录同步到 MySQL 表
-- 脚本目录浏览、脚本配置、手动执行、Cron 定时、日志查看
-- Compose 拉取 `latest` 镜像部署
-- GitHub Actions 自动推送 GHCR `latest`
-- Compose 中不保存数据库连接信息，统一在界面弹窗/表单录入
+- `data-manager` 单容器内同时包含：
+  - Node.js 应用界面与 API
+  - 基于 `adminer-master` 源码整理进来的 Adminer 页面
+- 访问同一个服务即可使用：
+  - `/`：Data Manager 主界面
+  - `/adminer/index.php`：内置 Adminer
+- Compose 中不出现数据库连接信息
+- 数据库连接通过页面弹窗或表单输入
 
 ## 目录说明
 
+- `adminer-source/adminer/`：从 `adminer-master` 复制进来的 Adminer 源码
 - `src/`：Node.js 后端
 - `public/`：前端页面
-- `docker/adminer/`：Adminer 容器镜像构建目录
+- `docker/apache/`：单容器内 Apache 反向代理配置
+- `docker/supervisord.conf`：单容器内同时启动 Apache 与 Node
 - `data/`：映射后的数据目录
 - `scripts/`：映射后的脚本目录
 - `logs/`：脚本日志目录
@@ -25,22 +27,16 @@
 
 ## 快速启动
 
-直接使用：
-
 ```bash
 docker compose pull && docker compose up -d
 ```
 
 访问：
 
-- 主界面：`http://你的服务器IP:3000`
-- Adminer：`http://你的服务器IP:8080`
-
-数据库账号、主机、端口、库名不会写在 compose 中，而是在页面里通过弹窗输入并保存。
+- 主界面：`http://你的服务器IP:3022`
+- 内置 Adminer：`http://你的服务器IP:3022/adminer/index.php`
 
 ## Compose 示例
-
-当前 `docker-compose.yml` 已改为拉取 `latest`：
 
 ```yaml
 services:
@@ -49,10 +45,11 @@ services:
     container_name: data-manager
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3022:80"
     environment:
       - TZ=Asia/Shanghai
-      - ADMINER_URL=http://your-server-ip:8080
+      - PORT=3000
+      - ADMINER_URL=/adminer/index.php
       - DATA_ROOT=/app/data
       - SCRIPTS_ROOT=/app/scripts
       - LOGS_ROOT=/app/logs
@@ -62,24 +59,14 @@ services:
       - /home/data-manager/scripts:/app/scripts
       - /home/data-manager/logs:/app/logs
       - /home/data-manager/storage:/app/storage
-
-  data-manager-adminer:
-    image: ghcr.io/lc010224/data-manager-adminer:latest
-    container_name: data-manager-adminer
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-    environment:
-      - TZ=Asia/Shanghai
 ```
 
 ## 发布 latest
 
-`main` 分支推送后，GitHub Actions 会自动推送：
+推送到 `main` 后自动构建：
 
 - `ghcr.io/lc010224/data-manager:latest`
-- `ghcr.io/lc010224/data-manager-adminer:latest`
-- 对应 commit sha 标签
+- `ghcr.io/lc010224/data-manager:<commit-sha>`
 
 ## 当前限制
 

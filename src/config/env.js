@@ -7,7 +7,7 @@ function normalizeDir(value, fallback) {
 
 export const env = {
   port: Number(process.env.PORT || 3000),
-  adminerUrl: process.env.ADMINER_URL || 'http://localhost:8080',
+  adminerUrl: process.env.ADMINER_URL || '/adminer/index.php',
   dataRoot: normalizeDir(process.env.DATA_ROOT, path.resolve(process.cwd(), 'data')),
   scriptsRoot: normalizeDir(process.env.SCRIPTS_ROOT, path.resolve(process.cwd(), 'scripts')),
   logsRoot: normalizeDir(process.env.LOGS_ROOT, path.resolve(process.cwd(), 'logs')),
