@@ -56,8 +56,12 @@ function topbar(title, desc, actions = '') {
   return `<div class="topbar"><div><h2>${title}</h2><p>${desc}</p></div><div class="top-actions">${actions}</div></div>`;
 }
 
-function kpi(label, value, meta = '') {
-  return `<div class="kpi"><span class="muted">${label}</span><strong>${value}</strong><div class="meta"><span>${meta}</span></div></div>`;
+function kpi(label, value, meta = '', tone = '') {
+  return `<div class="kpi ${tone}"><span class="muted">${label}</span><strong>${value}</strong><div class="meta"><span>${meta}</span></div></div>`;
+}
+
+function statusPill(label, tone = 'neutral') {
+  return `<span class="status-pill ${tone}">${label}</span>`;
 }
 
 function browserPanel(browser, root) {
@@ -91,7 +95,7 @@ function overviewPage() {
         <div class="metric-mini"><span class="muted">数据根目录</span><strong style="font-size:14px;line-height:1.6">${safe(roots.data)}</strong></div>
       </div>
     </div>
-    <div class="grid cols-3" style="margin-top:18px">${kpi('数据库连接', st.connections, `已保存 ${st.enabledConnections}`)}${kpi('脚本任务', st.scripts, `定时 ${st.scheduledScripts}`)}${kpi('Adminer 入口', safe(state.overview.adminerUrl), '内置路径')}</div>
+    <div class="grid cols-3" style="margin-top:18px">${kpi('数据库连接', st.connections, `已保存 ${st.enabledConnections}`, st.connections ? 'ok' : 'warn')}${kpi('脚本任务', st.scripts, `定时 ${st.scheduledScripts}`, st.scheduledScripts ? 'info' : 'warn')}${kpi('Adminer 入口', safe(state.overview.adminerUrl), '内置路径', 'info')}</div>
     <div class="grid cols-2" style="margin-top:18px">
       <div class="panel"><div class="section-head"><div><h3>运行资源</h3><p>容器挂载目录概览</p></div></div><div class="list">
         <div class="list-item"><div><strong>DATA_ROOT</strong><div class="muted">${safe(roots.data)}</div></div><span class="file-pill">dataset</span></div>
@@ -123,8 +127,8 @@ function comparePage() {
         <label>已选择文件<input id="compare-file" placeholder="从右侧目录选择文件" /></label>
         <div class="row"><button class="primary" id="run-compare">开始比对</button><button class="secondary" id="sync-compare">同步文件新增</button></div>
       </div></div>
-      <div class="panel"><div class="section-head"><div><h3>差异结果</h3><p>summary + 原始明细</p></div></div>${state.compareResult
-        ? `<div class="grid cols-3">${kpi('文件记录', state.compareResult.summary.fileRows)}${kpi('数据库记录', state.compareResult.summary.databaseRows)}${kpi('字段差异', state.compareResult.summary.changed)}</div><div class="codeblock" style="margin-top:14px">${safe(JSON.stringify(state.compareResult, null, 2))}</div>`
+      <div class="panel"><div class="section-head"><div><h3>差异结果</h3><p>summary + 原始明细</p></div>${state.compareResult ? statusPill(state.compareResult.summary.changed ? '检测到差异' : '结构一致', state.compareResult.summary.changed ? 'warn' : 'ok') : statusPill('等待执行', 'neutral')}</div>${state.compareResult
+        ? `<div class="result-grid"><div class="result-card"><span class="muted">文件记录</span><strong>${state.compareResult.summary.fileRows}</strong>${statusPill(`仅文件侧 ${state.compareResult.summary.onlyInFile}`, state.compareResult.summary.onlyInFile ? 'warn' : 'ok')}</div><div class="result-card"><span class="muted">数据库记录</span><strong>${state.compareResult.summary.databaseRows}</strong>${statusPill(`仅数据库侧 ${state.compareResult.summary.onlyInDatabase}`, state.compareResult.summary.onlyInDatabase ? 'warn' : 'ok')}</div><div class="result-card"><span class="muted">字段差异</span><strong>${state.compareResult.summary.changed}</strong>${statusPill(state.compareResult.summary.changed ? '需要复核' : '已对齐', state.compareResult.summary.changed ? 'danger' : 'ok')}</div><div class="result-card"><span class="muted">同步动作</span><strong>${state.compareResult.onlyInFile?.length || 0}</strong><span class="muted">仅文件侧可同步新增</span></div></div><div class="codeblock" style="margin-top:14px">${safe(JSON.stringify(state.compareResult, null, 2))}</div>`
         : '<div class="empty">还没有执行比对</div>'}</div>
     </div>
     <div class="panel"><div class="section-head"><div><h3>数据目录浏览器</h3><p>当前位置：${safe(state.fileBrowser?.currentPath || '.')}</p></div></div>${browserPanel(state.fileBrowser, 'data')}</div>
@@ -141,7 +145,7 @@ function scriptsPage() {
     <label>说明<textarea id="script-description" placeholder="脚本作用说明"></textarea></label>
     <label><input id="script-enabled" type="checkbox" style="width:auto;" /> 启用定时调度</label>
     <button class="primary" id="save-script">保存脚本</button></div></div>
-    <div class="panel"><div class="section-head"><div><h3>已配置脚本</h3><p>查看运行状态与日志</p></div></div><div class="table-wrap"><table><thead><tr><th>名称</th><th>路径</th><th>计划</th><th>状态</th><th>操作</th></tr></thead><tbody>${state.scripts.map((x) => `<tr><td>${safe(x.name)}</td><td>${safe(x.relativePath)}</td><td>${safe(x.schedule || '手动')}</td><td>${safe(x.execution?.status || (x.enabled ? 'waiting' : 'disabled'))}</td><td><button class="secondary" data-run="${x.id}">运行</button> <button class="secondary" data-log="${x.id}">日志</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">暂无脚本配置</td></tr>'}</tbody></table></div><div id="script-log-box" class="codeblock" style="margin-top:14px;">选择脚本后可查看日志</div></div></div>
+    <div class="panel"><div class="section-head"><div><h3>已配置脚本</h3><p>查看运行状态与日志</p></div>${statusPill(`${state.scripts.filter((item) => item.enabled).length} 个启用`, state.scripts.some((item) => item.enabled) ? 'ok' : 'warn')}</div><div class="table-wrap"><table><thead><tr><th>名称</th><th>路径</th><th>计划</th><th>状态</th><th>操作</th></tr></thead><tbody>${state.scripts.map((x) => `<tr><td>${safe(x.name)}</td><td>${safe(x.relativePath)}</td><td>${safe(x.schedule || '手动')}</td><td>${statusPill(safe(x.execution?.status || (x.enabled ? 'waiting' : 'disabled')), x.execution?.status === 'success' ? 'ok' : x.execution?.status === 'failed' ? 'danger' : x.enabled ? 'warn' : 'neutral')}</td><td><button class="secondary" data-run="${x.id}">运行</button> <button class="secondary" data-log="${x.id}">日志</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">暂无脚本配置</td></tr>'}</tbody></table></div><div id="script-log-box" class="codeblock" style="margin-top:14px;">选择脚本后可查看日志</div></div></div>
     <div class="panel"><div class="section-head"><div><h3>脚本目录浏览器</h3><p>当前位置：${safe(state.scriptBrowser?.currentPath || '.')}</p></div></div>${browserPanel(state.scriptBrowser, 'scripts')}</div></section>`;
 }
 
@@ -157,7 +161,7 @@ function settingsPage() {
     <label>数据库<input id="conn-database" placeholder="app" /></label>
     <label><input id="conn-enabled" type="checkbox" style="width:auto;" checked /> 启用此连接</label>
     <button class="primary" id="save-connection">保存连接</button></div></div>
-    <div class="panel"><div class="section-head"><div><h3>连接列表</h3><p>已保存连接支持立即测试</p></div></div><div class="table-wrap"><table><thead><tr><th>名称</th><th>类型</th><th>地址</th><th>数据库</th><th>操作</th></tr></thead><tbody>${state.connections.map((c) => `<tr><td>${safe(c.name)}</td><td>${safe(c.client)}</td><td>${safe(c.host)}:${safe(c.port)}</td><td>${safe(c.database)}</td><td><button class="secondary" data-test="${c.id}">测试</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">暂无连接，请先添加</td></tr>'}</tbody></table></div><div id="connection-result" class="empty" style="margin-top:14px;padding:16px">可点击测试验证连接</div></div></div></section>`;
+    <div class="panel"><div class="section-head"><div><h3>连接列表</h3><p>已保存连接支持立即测试</p></div>${statusPill(`${state.connections.length} 个连接`, state.connections.length ? 'ok' : 'warn')}</div><div class="table-wrap"><table><thead><tr><th>名称</th><th>类型</th><th>地址</th><th>数据库</th><th>操作</th></tr></thead><tbody>${state.connections.map((c) => `<tr><td>${safe(c.name)}</td><td>${statusPill(safe(c.client), c.client === 'postgres' ? 'info' : 'neutral')}</td><td>${safe(c.host)}:${safe(c.port)}</td><td>${safe(c.database)}</td><td><button class="secondary" data-test="${c.id}">测试</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">暂无连接，请先添加</td></tr>'}</tbody></table></div><div id="connection-result" class="empty" style="margin-top:14px;padding:16px">可点击测试验证连接</div></div></div></section>`;
 }
 
 function modal() {
@@ -256,7 +260,7 @@ function bind() {
     b.onclick = async () => {
       const res = await api(`/api/connections/${b.dataset.test}/test`, { method: 'POST' });
       const target = $('#connection-result');
-      if (target) target.textContent = res.ok ? '连接成功。' : '连接失败。';
+      if (target) target.innerHTML = res.ok ? `${statusPill('连接成功', 'ok')}<div style="margin-top:8px" class="muted">数据库已通过即时连通性测试。</div>` : `${statusPill('连接失败', 'danger')}<div style="margin-top:8px" class="muted">请检查主机、端口、用户和密码。</div>`;
     };
   });
 }
