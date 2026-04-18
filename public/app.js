@@ -169,6 +169,17 @@ function modal() {
   return `<div class="modal-mask" id="modal-mask"><div class="modal-card"><div class="section-head"><div><h3>快速添加数据库连接</h3><p>信息仅保存到挂载 storage 目录</p></div><button class="secondary" id="close-modal">关闭</button></div><div class="stack"><label>连接名称<input id="m-name" placeholder="例如 ovh-main" /></label><label>数据库类型<select id="m-client"><option value="mysql">MySQL / MariaDB</option><option value="postgres">PostgreSQL</option></select></label><label>主机<input id="m-host" value="127.0.0.1" /></label><label>端口<input id="m-port" value="3306" /></label><label>用户名<input id="m-user" value="root" /></label><label>密码<input id="m-password" type="password" /></label><label>数据库名<input id="m-database" /></label><div class="row"><button class="primary" id="save-modal">保存连接</button></div></div></div></div>`;
 }
 
+function page() {
+  if (!state.overview) return '<div class="panel">正在加载...</div>';
+  return ({
+    overview: overviewPage,
+    adminer: adminerPage,
+    compare: comparePage,
+    scripts: scriptsPage,
+    settings: settingsPage,
+  }[state.page] || overviewPage)();
+}
+
 function render() {
   const app = $('#app');
   app.innerHTML = `<div class="layout"><aside class="sidebar"><div class="brand"><div class="brand-badge">DM</div><h1>Data Manager</h1><p>Adminer + File Diff + Script Control 的企业级数据操作中台。</p><div class="status-chip">single service runtime</div></div><div class="nav">${pages.map(([id, label, no]) => `<button class="${state.page === id ? 'active' : ''}" data-page="${id}"><span>${label}</span><span>${no}</span></button>`).join('')}</div><div class="sidebar-foot"><strong>Gateway Notes</strong><span>采用高信息密度的紫橙浅色体系，突出路径选择与表格可读性。</span></div></aside><main class="main">${page()}</main></div>${modal()}`;
